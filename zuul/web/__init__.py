@@ -2758,6 +2758,8 @@ class ZuulWebAPI(object):
                     iba.state = model.STATE_DELETING
 
             for upload in iur.getUploadsForImage(iba.canonical_name):
+                if upload.artifact_uuid != iba.uuid:
+                    continue
                 # This is best effort to change all the uploads
                 try:
                     with upload.locked(ctx, blocking=False):

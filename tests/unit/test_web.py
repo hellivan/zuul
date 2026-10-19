@@ -1676,9 +1676,20 @@ class TestWebProviders(LauncherBaseTestCase, WebMixin):
             ['debian-local', 'ubuntu-local'],
         )
         self.waitUntilSettled()
+        # Build the images once more so we have multiple image
+        # build artifacts.
+        self.addImageBuildEvent(
+            'tenant-one',
+            'review.example.com/common-config',
+            'master',
+            ['debian-local', 'ubuntu-local'],
+        )
+        self.waitUntilSettled()
         self.startWebServer()
         self.assertHistory([
             dict(name='build-debian-local-image', result='SUCCESS'),
+            dict(name='build-debian-local-image', result='SUCCESS'),
+            dict(name='build-ubuntu-local-image', result='SUCCESS'),
             dict(name='build-ubuntu-local-image', result='SUCCESS'),
         ], ordered=False)
 
@@ -1686,8 +1697,8 @@ class TestWebProviders(LauncherBaseTestCase, WebMixin):
         data = resp.json()
         self.assertEqual(4, len(data))
         self.assertNotIn('build_artifacts', data[0])
-        self.assertEqual(1, len(data[1]['build_artifacts']))
-        self.assertEqual(1, len(data[2]['build_artifacts']))
+        self.assertEqual(2, len(data[1]['build_artifacts']))
+        self.assertEqual(2, len(data[2]['build_artifacts']))
         self.assertEqual(1, len(data[1]['build_artifacts'][0]['uploads']))
         self.assertEqual(1, len(data[2]['build_artifacts'][0]['uploads']))
         art = data[1]['build_artifacts'][0]
@@ -1711,7 +1722,16 @@ class TestWebProviders(LauncherBaseTestCase, WebMixin):
         for _ in iterate_timeout(10, "artifact to be deleted"):
             resp = self.get_url('api/tenant/tenant-one/images')
             data = resp.json()
-            if 'build_artifacts' not in data[1]:
+            if len(data[1]['build_artifacts']) == 1:
+                other_art = data[1]['build_artifacts'][0]
+                # We need multiple asserts here to make sure nothing
+                # unexpected is deleted (or marked for deletion) as
+                # zuul-web is operating on cached data and we might not
+                # have the latest state yet.
+                self.assertNotEqual(art['uuid'], other_art['uuid'])
+                self.assertEqual('ready', other_art['state'])
+                self.assertEqual(1, len(other_art['uploads']))
+                self.assertEqual('ready', other_art['uploads'][0]['state'])
                 break
 
     @return_data(
