@@ -2236,6 +2236,13 @@ class TestWebProviders(LauncherBaseTestCase, WebMixin):
                 break
         self.assertEqual('test hold', node.comment)
 
+        for _ in iterate_timeout(30, "node comment set"):
+            resp = self.get_url("api/tenant/tenant-one/nodes")
+            data = resp.json()
+            if data[0]['state'] == 'hold':
+                self.assertEqual(data[0]['comment'], 'test hold')
+                break
+
         resp = self.put_url(
             f"api/tenant/tenant-one/nodes/{nodes[0]['uuid']}",
             headers={'Authorization': 'Bearer %s' % token},

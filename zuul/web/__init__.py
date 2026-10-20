@@ -651,8 +651,8 @@ class ProviderNodeConverter:
             datetime.utcfromtimestamp(node.request_time)
             if node.request_time is not None else None
         )
-        comment = getattr(node, 'next_comment',
-                          getattr(node, 'comment', None))
+        comment = (getattr(node, 'next_comment', None) or
+                   getattr(node, 'comment', None))
         ret = {
             'id': node.uuid,
             'uuid': node.uuid,
