@@ -6190,22 +6190,22 @@ class RoleTestCase(ZuulTestCase):
         path = os.path.join(self.jobdir_root, build.uuid,
                             'ansible', playbook, 'ansible.cfg')
         with open(path) as f:
-            return [line for line in f if line.startswith('collections_paths')]
+            return [line for line in f if line.startswith('collections_path ')]
 
     def _assertCollectionPath(self, build, playbook, present=True):
         lines = self._getCollectionsPaths(build, playbook)
         if present:
             self.assertEqual(len(lines), 1,
-                             "Expected one collections_paths line in %s" %
+                             "Expected one collections_path line in %s" %
                              playbook)
         else:
             self.assertEqual(len(lines), 0,
-                             "Expected no collections_paths line in %s" %
+                             "Expected no collections_path line in %s" %
                              playbook)
 
     def _assertCollectionSymlink(self, build, playbook, namespace, name):
         lines = self._getCollectionsPaths(build, playbook)
-        self.assertTrue(lines, "No collections_paths in ansible.cfg")
+        self.assertTrue(lines, "No collections_path in ansible.cfg")
         collections_root = lines[0].split('=', 1)[-1].strip()
         symlink = os.path.join(
             collections_root, 'ansible_collections', namespace, name)
@@ -6811,7 +6811,7 @@ class TestImplicitRoles(RoleTestCase):
 
     def test_collection(self):
         # A project whose own repo is a collection (has galaxy.yml at root)
-        # should set up collections_paths silently via the implicit role.
+        # should set up collections_path silently via the implicit role.
         self.executor_server.hold_jobs_in_build = True
         A = self.fake_gerrit.addFakeChange(
             'org/collection-project', 'master', 'A')
