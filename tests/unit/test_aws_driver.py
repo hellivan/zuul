@@ -1180,6 +1180,78 @@ class TestAwsDriver(AwsBaseTest):
         self._test_state_machines(label_name, provider_name,
                                   node_class, future_names)
 
+    @simple_layout('layouts/nodepool.yaml', enable_nodepool=True)
+    def test_state_machines_snapshot(self):
+        # Stop the launcher main loop, so we can drive the state machine
+        # on our own.
+        self.waitUntilSettled()
+        self.launcher._running = False
+        self.launcher.wake_event.set()
+        self.launcher.launcher_thread.join()
+
+        layout = self.scheds.first.sched.abide.tenants.get('tenant-one').layout
+        provider = layout.providers['aws-us-east-1-main']
+        provider.getEndpoint().start()
+        future_names = ['host_create_future', 'create_future']
+
+        with self.createZKContext(None) as ctx:
+            node = AwsProviderNode.new(
+                ctx, label='debian-normal', uuid='1234',
+                tags={'zuul_node_uuid': '1234'})
+            self._drive_state_machine(ctx, node, future_names, provider, True)
+            self.assertTrue(node.create_state_machine.complete)
+            node.createSnapshot(ctx)
+
+            create_snapshot = provider.endpoint._createSnapshot
+
+            def _mock_create_snapshot(volume_id, tags):
+                snapshot = create_snapshot(volume_id, tags)
+                # Moto may return an already completed snapshot
+                snapshot['State'] = 'pending'
+                return snapshot
+
+            # A different launcher may not have the snapshot in its cache yet.
+            with (mock.patch.object(provider.endpoint, '_listSnapshots',
+                                    return_value=[]),
+                  mock.patch.object(provider.endpoint, '_createSnapshot',
+                                    side_effect=_mock_create_snapshot)):
+                # Advance the state machine once to trigger the snapshot
+                # creation.
+                with node.snapshot.activeContext(ctx):
+                    node.snapshot.tags = node.tags
+                    sm = provider.getSnapshotStateMachine(node, self.log)
+                    node.snapshot.state_machine = sm
+                    self.assertIsNone(sm.advance())
+                    self.assertFalse(sm.complete)
+
+                snapshot_id = sm.snapshot_id
+                self.assertIsNotNone(snapshot_id)
+
+                node.snapshot.refresh(ctx)
+                self.assertEqual(
+                    snapshot_id, node.snapshot.snapshot_state['snapshot_id'])
+                # Re-create the state machine and make sure we can resume
+                # it from the previous state.
+                with node.snapshot.activeContext(ctx):
+                    resumed_sm = provider.getSnapshotStateMachine(
+                        node, self.log)
+                    node.snapshot.state_machine = resumed_sm
+                    self.assertIsNone(resumed_sm.advance())
+                    self.assertFalse(resumed_sm.complete)
+                    self.assertEqual(
+                        resumed_sm.SNAPSHOT_PENDING, resumed_sm.state)
+
+            for _ in iterate_timeout(30, "snapshot state machine to complete"):
+                snap_arn = resumed_sm.advance()
+                if resumed_sm.complete:
+                    self.assertEqual(
+                        'arn:aws:ec2:us-east-1:123456789012:'
+                        f'snapshot/{snapshot_id}', snap_arn)
+                    break
+                time.sleep(0.5)
+
+            self._drive_state_machine(ctx, node, future_names, provider, False)
+
     @contextlib.contextmanager
     def _block_futures(self):
         with (mock.patch(
