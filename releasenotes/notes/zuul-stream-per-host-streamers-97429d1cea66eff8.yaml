@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    Streamed output from ``command``, ``shell``, ``win_command`` and
+    ``win_shell`` tasks running on more than one host is now collected
+    for every host before moving on. Previously the output of all but
+    one host could appear under a later task in the job output, or be
+    missing entirely if the task was the last one in a playbook.

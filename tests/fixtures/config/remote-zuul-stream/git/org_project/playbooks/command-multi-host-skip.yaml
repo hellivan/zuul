@@ -1,0 +1,53 @@
+- hosts: all
+  tasks:
+    - name: Start zuul_console daemon
+      zuul_console:
+        port: "{{ test_console_port }}"
+
+    # In each round one host skips a command task (via creates:) while
+    # the other runs it, and then the other way around.  The skipping
+    # host's result arrives first; the running host's output must
+    # still be streamed before its own result.  Swapping the roles
+    # means one task of each round is affected regardless of the
+    # order the callback starts the per-host streamers in.
+    - name: Create skip markers
+      file:
+        path: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-{{ item }}"
+        state: touch
+      loop: "{{ ['a1', 'a2', 'a3'] if inventory_hostname == 'controller' else ['b1', 'b2', 'b3'] }}"
+
+    - name: Round 1 skip on controller, run on compute1
+      command: sh -c 'sleep 3; echo "Round 1 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-a1"
+
+    - name: Round 1 skip on compute1, run on controller
+      command: sh -c 'sleep 3; echo "Round 1 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-b1"
+
+    - name: Round 2 skip on controller, run on compute1
+      command: sh -c 'sleep 3; echo "Round 2 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-a2"
+
+    - name: Round 2 skip on compute1, run on controller
+      command: sh -c 'sleep 3; echo "Round 2 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-b2"
+
+    - name: Round 3 skip on controller, run on compute1
+      command: sh -c 'sleep 3; echo "Round 3 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-a3"
+
+    - name: Round 3 skip on compute1, run on controller
+      command: sh -c 'sleep 3; echo "Round 3 ran on {{ inventory_hostname }}"'
+      args:
+        creates: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-b3"
+
+    - name: Remove skip markers
+      file:
+        path: "/tmp/{{ zuul.build }}-{{ inventory_hostname }}-{{ item }}"
+        state: absent
+      loop: [a1, a2, a3, b1, b2, b3]
