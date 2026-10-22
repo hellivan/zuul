@@ -23,6 +23,11 @@ ARG IMAGE_FLAVOR=
 
 FROM quay.io/opendevorg/python-base:3.14-trixie${IMAGE_FLAVOR} AS zuul-base
 
+RUN apt-get update \
+  && apt-get dist-upgrade -y \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
 # This is a mirror of:
 # FROM docker.io/library/node:22-trixie AS node-base
 FROM quay.io/opendevmirror/node:22-trixie AS node-base
