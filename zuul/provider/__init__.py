@@ -836,36 +836,6 @@ class BaseProvider(zkobject.PolymorphicZKObjectMixin,
         """
         raise NotImplementedError()
 
-    def getAZs(self):
-        """Return a list of availability zones for this provider
-
-        One of these will be selected at random and supplied to the
-        create state machine.  If a request handler is building a node
-        set from an existing ready node, then the AZ from that node
-        will be used instead of the results of this method.
-
-        :returns: A list of availability zone names.
-        """
-        return [None]
-
-    def labelReady(self, label):
-        """Indicate whether a label is ready in the provided cloud
-
-        This is used by the launcher to determine whether it should
-        consider a label to be in-service for a provider.  If this
-        returns False, the label will be ignored for this provider.
-
-        This does not need to consider whether a diskimage is ready;
-        the launcher handles that itself.  Instead, this can be used
-        to determine whether a cloud-image is available.
-
-        :param ProviderLabel label: A config object describing a label
-            for an instance.
-
-        :returns: A bool indicating whether the label is ready.
-        """
-        return True
-
     # The following methods must be implemented only if image
     # management is supported:
 

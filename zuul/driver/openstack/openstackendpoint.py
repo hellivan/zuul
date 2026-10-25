@@ -586,48 +586,6 @@ class OpenstackProviderEndpoint(BaseProviderEndpoint):
             quota = quota_from_flavor(os_flavor, label=label)
             self.quota_cache.setResource(key, quota)
 
-    def getAZs(self):
-        # TODO: This is currently unused; it's unclear if we will need
-        # to incorporate this into the node reuse process in the
-        # launcher.
-        azs = self._listAZs()
-        if not azs:
-            # If there are no zones, return a list containing None so that
-            # random.choice can pick None and pass that to Nova. If this
-            # feels dirty, please direct your ire to policy.json and the
-            # ability to turn off random portions of the OpenStack API.
-            return [None]
-        return azs
-
-    def labelReady(self, label):
-        if not label.cloud_image:
-            return False
-
-        # If an image ID was supplied, we'll assume it is ready since
-        # we don't currently have a way of validating that (except during
-        # server creation).
-        if label.cloud_image.image_id:
-            return True
-
-        image = self._findImage(label.cloud_image.external_name)
-        if not image:
-            self.log.warning(
-                "Provider %s is configured to use %s as the"
-                " cloud-image for label %s and that"
-                " cloud-image could not be found in the"
-                " cloud." % (self.provider.name,
-                             label.cloud_image.external_name,
-                             label.name))
-            # If the user insists there should be an image but it
-            # isn't in our cache, invalidate the cache periodically so
-            # that we can see new cloud image uploads.
-            if (time.time() - self._last_image_check_failure >
-                self.IMAGE_CHECK_TIMEOUT):
-                self._findImage.cache_clear()
-                self._last_image_check_failure = time.time()
-            return False
-        return True
-
     def getImageUploadJob(self, provider_image, image_name,
                           image_format, metadata, md5, sha256):
         return OpenstackImageUploadJob(
