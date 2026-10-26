@@ -310,6 +310,41 @@ class FunctionalZuulStreamMixIn:
                 r'fake \| skipping: Conditional result was False', text)
             self.assertLogLine(r'compute1 \| Testing raw', text)
 
+    def _assertStreamedBeforeResult(self, task, host, output, text):
+        # The streamed output of a task on a host must be logged
+        # before that host's result for the task.
+        lines = text.splitlines()
+        task_idx = next(i for i, ln in enumerate(lines)
+                        if ln.endswith(f'TASK [{task}]'))
+        out_re = re.compile(rf'.* \| {host} \| {output}$')
+        out_idx = next((i for i, ln in enumerate(lines)
+                        if out_re.match(ln)), None)
+        self.assertIsNotNone(out_idx, f"'{host} | {output}' not in log")
+        ok_re = re.compile(rf'.* \| {host} \| ok: Runtime: \d')
+        ok_idx = next(i for i, ln in enumerate(lines)
+                      if i > task_idx and ok_re.match(ln))
+        self.assertLess(out_idx, ok_idx,
+                        f"'{host} | {output}' logged after its result")
+
+    def test_command_multi_host_skip(self):
+        # A command task skipped (via creates:) on one host must not
+        # lose track of the log streamer of another host still
+        # running the same task: its output has to be streamed before
+        # its result is logged.
+        job = self._run_job('command-multi-host-skip')
+        with self.jobLog(job):
+            build = self.history[-1]
+            self.assertEqual(build.result, 'SUCCESS')
+
+            text = self._get_job_output(build)
+            for r in (1, 2, 3):
+                self._assertStreamedBeforeResult(
+                    f'Round {r} skip on controller, run on compute1',
+                    'compute1', f'Round {r} ran on compute1', text)
+                self._assertStreamedBeforeResult(
+                    f'Round {r} skip on compute1, run on controller',
+                    'controller', f'Round {r} ran on controller', text)
+
     def test_command_split_streams(self):
         job = self._run_job('command', split=True)
         with self.jobLog(job):

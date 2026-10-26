@@ -326,7 +326,8 @@ class CallbackModule(default.CallbackModule):
         self._task = None
         self._daemon_running = False
         self._play = None
-        self._streamers = {}  # task uuid -> streamer
+        # (task uuid, inventory hostname) -> streamer
+        self._streamers = {}
         self.sent_failure_result = False
         self.configure_logger()
         self.configure_regexes()
@@ -534,7 +535,8 @@ class CallbackModule(default.CallbackModule):
                           job=False, executor=True)
                 streamer = Streamer(self, host, ip, port, log_id)
                 streamer.start()
-                self._streamers[self._task._uuid] = streamer
+                self._streamers[(self._task._uuid,
+                                 inventory_hostname)] = streamer
 
     def v2_playbook_on_handler_task_start(self, task):
         self.v2_playbook_on_task_start(task, False)
@@ -557,10 +559,11 @@ class CallbackModule(default.CallbackModule):
                 msg = "[Zuul] Log Stream did not terminate"
                 self._log(msg)
 
-    def _stop_skipped_task_streamer(self, task):
+    def _stop_skipped_task_streamer(self, task, inventory_hostname):
         # Immediately stop a streamer for a skipped task.  We don't
         # expect a logfile in that situation.
-        streamer = self._streamers.pop(task._uuid, None)
+        streamer = self._streamers.pop(
+            (task._uuid, inventory_hostname), None)
         if streamer is None:
             return
         # Give no grace since we don't expect the log to exist
@@ -669,7 +672,8 @@ class CallbackModule(default.CallbackModule):
         return ret
 
     def v2_runner_on_skipped(self, result):
-        self._stop_skipped_task_streamer(result._task)
+        self._stop_skipped_task_streamer(
+            result._task, result._host.get_name())
         if result._task.loop:
             self._items_done = False
             self._deferred_result = dict(result._result)
@@ -699,7 +703,8 @@ class CallbackModule(default.CallbackModule):
             # "Did/Would not run command since 'path' exists/does not exist"
             # is the message we're looking for.
             if 'not run command since' in result_dict.get('msg', ''):
-                self._stop_skipped_task_streamer(result._task)
+                self._stop_skipped_task_streamer(
+                    result._task, result._host.get_name())
 
         if result._task.action in ('win_command', 'win_shell'):
             # The win_command module has a small set of msgs it returns;
@@ -710,7 +715,8 @@ class CallbackModule(default.CallbackModule):
             # for.
             m = result_dict.get('msg', '')
             if 'skipped, since' in m and 'exist' in m:
-                self._stop_skipped_task_streamer(result._task)
+                self._stop_skipped_task_streamer(
+                    result._task, result._host.get_name())
 
         if (self._play.strategy == 'free'
                 and self._last_task_banner != result._task._uuid):
