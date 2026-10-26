@@ -3497,7 +3497,7 @@ class AnsibleJob(object):
                     jobdir_playbook.roles_path))
 
             if jobdir_playbook.collections_paths:
-                config.write('collections_paths = %s\n' % ':'.join(
+                config.write('collections_path = %s\n' % ':'.join(
                     jobdir_playbook.collections_paths))
 
             # On playbooks with secrets we want to prevent the
