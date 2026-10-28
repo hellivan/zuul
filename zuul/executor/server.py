@@ -94,6 +94,8 @@ from zuul.model import (
     FrozenJob,
     Job,
     KeystorePasswordManager,
+    MergeOperationResultNormal,
+    MergeOperationResultConflict,
     RepoState,
 )
 import zuul.model
@@ -2119,8 +2121,11 @@ class AnsibleJob(object):
             result = dict(result='ABORTED')
             self.executor_server.completeBuild(self.build_request, result)
             return None
-        if not ret:  # merge conflict
-            result = dict(result='MERGE_CONFLICT')
+        if not isinstance(ret, MergeOperationResultNormal):
+            if isinstance(ret, MergeOperationResultConflict):
+                result = dict(result='MERGE_CONFLICT')
+            else:
+                result = dict(result='MERGE_ERROR')
             if self.executor_server.statsd:
                 base_key = "zuul.executor.{hostname}.merger"
                 self.executor_server.statsd.incr(base_key + ".FAILURE")
@@ -2130,9 +2135,9 @@ class AnsibleJob(object):
         if self.executor_server.statsd:
             base_key = "zuul.executor.{hostname}.merger"
             self.executor_server.statsd.incr(base_key + ".SUCCESS")
-        recent = ret[3]
-        orig_commit = ret[4]
-        self.merge_ops = ret[5] or []
+        recent = ret.recent
+        orig_commit = ret.orig_commit
+        self.merge_ops = ret.ops or []
         for key, commit in recent.items():
             (connection, project, branch) = key
             # Compare the commit with the repo state. If it's included in the
