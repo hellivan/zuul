@@ -8165,20 +8165,18 @@ class QueueItem(zkobject.ZKObject):
             if not zuul_return:
                 # If zuul.child_jobs exists and is empty, the user
                 # wants to skip all child jobs.
-                to_skip = job_graph.getDependentJobsRecursively(
-                    build.job, skip_soft=True)
-                skipped += to_skip
+                intersect_jobs = set()
             else:
                 # The user supplied a list of jobs to run.
-                intersect_jobs = set([
+                intersect_jobs = set(
                     j for j in dependent_jobs if j.name in zuul_return
-                ])
+                )
 
-                for skip in (dependent_jobs - intersect_jobs):
-                    skipped.append(skip)
-                    to_skip = job_graph.getDependentJobsRecursively(
-                        skip, skip_soft=True)
-                    skipped += to_skip
+            for skip in (dependent_jobs - intersect_jobs):
+                skipped.append(skip)
+                to_skip = job_graph.getDependentJobsRecursively(
+                    skip, skip_soft=True)
+                skipped += to_skip
 
         elif build.result not in ('SUCCESS', 'SKIPPED') and not build.paused:
             skipped_reason = 'Skipped due to failed job ' + build.job.name

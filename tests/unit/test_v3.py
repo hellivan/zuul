@@ -7253,6 +7253,25 @@ class TestInitJobs(ZuulTestCase):
         self.assertTrue('Skipped 2 jobs' in A.messages[0])
         self.assertIn('Build succeeded', A.messages[0])
 
+    @simple_layout('layouts/init-job.yaml')
+    def test_data_return_skip_all_child_jobs(self):
+        A = self.fake_gerrit.addFakeChange('org/project', 'master', 'A')
+
+        self.executor_server.returnData(
+            'init-job', A, data={
+                'zuul': {
+                    'child_jobs': [],
+                }
+            })
+
+        self.fake_gerrit.addEvent(A.getPatchsetCreatedEvent(1))
+        self.waitUntilSettled()
+        self.assertHistory([
+            dict(name='init-job', result='SUCCESS', changes='1,1'),
+        ])
+        self.assertIn('Skipped 2 jobs', A.messages[0])
+        self.assertIn('Build succeeded', A.messages[0])
+
     @simple_layout('layouts/init-job-skip.yaml')
     def test_skipped_init_job(self):
         # Test that an init job can be skipped due to file matchers
