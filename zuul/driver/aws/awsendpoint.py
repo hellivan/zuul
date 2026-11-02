@@ -321,7 +321,10 @@ class AwsSnapshotStateMachine(statemachine.StateMachine):
                     break
 
         if self.snapshot_id:
-            snapshot = dict(SnapshotId=self.snapshot_id)
+            snapshot = dict(
+                SnapshotId=self.snapshot_id,
+                State="pending",
+            )
             self.snapshot = self.endpoint._refresh(snapshot)
 
     def toDict(self):
