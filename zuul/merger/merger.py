@@ -1049,7 +1049,8 @@ class Repo(object):
                                 'utf-8')
             return ret
 
-    def getFilesChanges(self, branch, tosha=None, zuul_event_id=None):
+    def getFilesChanges(self, branch, tosha=None, zuul_event_id=None,
+                        diff_only=False):
         with self.createRepoObject(zuul_event_id) as repo:
             self.fetch(branch, zuul_event_id=zuul_event_id)
             head_hexsha = repo.commit(
@@ -1071,6 +1072,13 @@ class Repo(object):
                 diff_output = repo.git.diff(
                     commit_diff, name_only=True, no_color=True, z=True)
                 diff_files = set(f for f in diff_output.split("\0") if f)
+
+                if diff_only:
+                    # The caller wants every file that differs, e.g. to
+                    # compare an old and a new branch tip; the log
+                    # filter below would miss files changed by commits
+                    # that are only reachable from tosha.
+                    return list(diff_files)
 
                 log_output = repo.git.log(
                     commit_diff, name_only=True, pretty="format:",
@@ -1697,11 +1705,12 @@ class Merger(object):
         return repo.getFiles(files, dirs, branch=branch)
 
     def getFilesChanges(self, connection_name, project_name, branch,
-                        tosha=None, zuul_event_id=None):
+                        tosha=None, zuul_event_id=None, diff_only=False):
         """Get a list of files changed in one or more commits
 
         Gets files changed between tosha and branch (or just the
-        commit on branch if tosha is not specified).
+        commit on branch if tosha is not specified).  With diff_only,
+        all files that differ between tosha and branch are returned.
 
         Call Merger.updateRepo() first to make sure the repo is up to
         date.
@@ -1715,4 +1724,5 @@ class Merger(object):
         # branches are available locally.  We might need to diff
         # against them.
         repo.reset()
-        return repo.getFilesChanges(branch, tosha, zuul_event_id=zuul_event_id)
+        return repo.getFilesChanges(branch, tosha, zuul_event_id=zuul_event_id,
+                                    diff_only=diff_only)

@@ -168,12 +168,13 @@ class MergeClient(object):
     def getFilesChangesRaw(self, connection_name, project_name, branch, tosha,
                            precedence=PRECEDENCE_MAXIMUM,
                            build_set=None, needs_result=False,
-                           event=None):
+                           event=None, diff_only=False):
         changes_data = [dict(
             connection=connection_name,
             project=project_name,
             branch=branch,
             tosha=tosha,
+            diff_only=diff_only,
         )]
         data = dict(changes=changes_data)
         job = self.submitJob(

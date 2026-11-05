@@ -364,7 +364,8 @@ class BaseMergeServer(metaclass=ABCMeta):
                     files = self.merger.getFilesChanges(
                         connection_name, project_name,
                         change['branch'], change['tosha'],
-                        zuul_event_id=zuul_event_id)
+                        zuul_event_id=zuul_event_id,
+                        diff_only=change.get('diff_only', False))
                 results.append(files)
             except Exception:
                 return dict(updated=False)

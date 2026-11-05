@@ -518,6 +518,7 @@ class GithubEventProcessor(object):
         event.oldrev = self.body.get('before')
         event.newrev = self.body.get('after')
         event.commits = self.body.get('commits')
+        event.forced = bool(self.body.get('forced'))
 
         ref_parts = event.ref.split('/', 2)  # ie, ['refs', 'heads', 'foo/bar']
 
@@ -2788,13 +2789,42 @@ class GithubConnection(ZKChangeCacheMixin, ZKBranchCacheMixin, BaseConnection):
         # The payload for the push event is now limited to 2,048
         # commits. If there are more than 2,048 commits, the event will
         # not contain serialized diff information for each commit.
-        # In this case we need to get the files via the merger.
+        # GitHub also sends no commits for a force push (e.g. a rebase
+        # onto a changed base), even though files changed.
+        # In both cases we need to get the files via the merger.
+        if event.branch and (event.forced or len(event.commits) >= 2048):
+            return self._getBranchUpdateFileNames(event)
         if len(event.commits) >= 2048:
             return None
         for c in event.commits:
             for f in c.get('added') + c.get('modified') + c.get('removed'):
                 files.add(f)
         return list(files)
+
+    def _getBranchUpdateFileNames(self, event):
+        """Ask a merger which files differ between the old and new tip
+
+        Returns None if that can't be determined (for example because
+        the merger doesn't have the old commit anymore), which makes
+        callers assume that everything may have changed.
+        """
+        log = get_annotated_logger(self.log, event)
+        if not self.sched or not event.oldrev or set(event.oldrev) == {'0'}:
+            return None
+        try:
+            job = self.sched.merger.getFilesChangesRaw(
+                self.connection_name, event.project_name, event.branch,
+                event.oldrev, needs_result=True, diff_only=True)
+            job.wait()
+            if not job.updated:
+                log.debug("Fileschanges job %s for %s..%s failed",
+                          job, event.oldrev, event.newrev)
+                return None
+            return job.files[0]
+        except Exception:
+            log.exception("Unable to get the files changed by the update "
+                          "of %s from %s", event.branch, event.oldrev)
+            return None
 
     def getWebController(self, zuul_web):
         return GithubWebController(zuul_web, self)

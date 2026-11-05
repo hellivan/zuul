@@ -288,6 +288,7 @@ class GithubTriggerEvent(TriggerEvent):
         self.check_run = None
         self.status = None
         self.commits = []
+        self.forced = False
         self.body_edited = None
         self.branch_protection_changed = None
         self.default_branch_changed = None
@@ -303,6 +304,7 @@ class GithubTriggerEvent(TriggerEvent):
         d["check_run"] = self.check_run
         d["status"] = self.status
         d["commits"] = self.commits
+        d["forced"] = self.forced
         d["body_edited"] = self.body_edited
         d["branch_protection_changed"] = self.branch_protection_changed
         d["default_branch_changed"] = self.default_branch_changed
@@ -319,6 +321,7 @@ class GithubTriggerEvent(TriggerEvent):
         self.check_run = d["check_run"]
         self.status = d["status"]
         self.commits = d["commits"]
+        self.forced = d.get("forced", False)
         self.body_edited = d["body_edited"]
         self.branch_protection_changed = d.get("branch_protection_changed")
         self.default_branch_changed = d.get("default_branch_changed")
