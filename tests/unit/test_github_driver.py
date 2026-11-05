@@ -1140,14 +1140,16 @@ class TestGithubDriver(ZuulTestCase):
                                      old_sha=None, new_sha=None,
                                      modified_files=None,
                                      removed_files=None,
-                                     expected_cat_jobs=None):
+                                     expected_cat_jobs=None,
+                                     forced=False):
         pevent = self.fake_github.getPushEvent(
             project=project,
             ref='refs/heads/%s' % branch,
             old_rev=old_sha,
             new_rev=new_sha,
             modified_files=modified_files,
-            removed_files=removed_files)
+            removed_files=removed_files,
+            forced=forced)
 
         # record previous tenant reconfiguration time, which may not be set
         old = self.scheds.first.sched.tenant_layout_state.get(
@@ -1184,6 +1186,76 @@ class TestGithubDriver(ZuulTestCase):
                                           old_sha='0' * 40,
                                           expect_reconfigure=True,
                                           expected_cat_jobs=1)
+
+    @simple_layout('layouts/basic-github.yaml', driver='github')
+    def test_push_event_reconfigure_forced(self):
+        # The merger doesn't know the old commit, so we can't tell
+        # whether the config changed and have to assume that it did.
+        self._test_push_event_reconfigure('org/common-config', 'master',
+                                          old_sha='1' * 40,
+                                          forced=True,
+                                          expect_reconfigure=True)
+
+    def _forced_push_old_and_new(self, project, files):
+        # Commit on master to get a new tip; the caller reports it as
+        # a force push of the old tip.
+        repo = git.Repo(os.path.join(self.upstream_root, project))
+        old_sha = repo.heads['master'].commit.hexsha
+        new_sha = self.create_commit(project, files=files)
+        return old_sha, new_sha
+
+    @simple_layout('layouts/basic-github.yaml', driver='github')
+    def test_push_event_forced_config_changed(self):
+        # E.g. a rebase onto a base that changed the config: a forced
+        # push has no commits, so the merger has to find the files.
+        project = 'org/common-config'
+        old_sha, new_sha = self._forced_push_old_and_new(
+            project, {'zuul.yaml': '\n# changed\n'})
+        self._test_push_event_reconfigure(project, 'master',
+                                          old_sha=old_sha,
+                                          new_sha=new_sha,
+                                          forced=True,
+                                          expect_reconfigure=True,
+                                          expected_cat_jobs=1)
+
+    @simple_layout('layouts/basic-github.yaml', driver='github')
+    def test_push_event_forced_config_unchanged(self):
+        # E.g. an amended commit: no config file differs.
+        project = 'org/common-config'
+        old_sha, new_sha = self._forced_push_old_and_new(
+            project, {'README': 'changed\n'})
+        self._test_push_event_reconfigure(project, 'master',
+                                          old_sha=old_sha,
+                                          new_sha=new_sha,
+                                          forced=True,
+                                          expect_reconfigure=False)
+
+    @simple_layout('layouts/basic-github.yaml', driver='github')
+    def test_push_event_forced_config_reverted(self):
+        # Resetting a branch to an older commit that doesn't have a
+        # config change must also be detected.
+        project = 'org/common-config'
+        old_sha, new_sha = self._forced_push_old_and_new(
+            project, {'zuul.yaml': '\n# changed\n'})
+        self._test_push_event_reconfigure(project, 'master',
+                                          old_sha=old_sha,
+                                          new_sha=new_sha,
+                                          modified_files=['zuul.yaml'],
+                                          expect_reconfigure=True)
+        repo = git.Repo(os.path.join(self.upstream_root, project))
+        repo.heads['master'].set_commit(old_sha)
+        self._test_push_event_reconfigure(project, 'master',
+                                          old_sha=new_sha,
+                                          new_sha=old_sha,
+                                          forced=True,
+                                          expect_reconfigure=True)
+
+    @simple_layout('layouts/basic-github.yaml', driver='github')
+    def test_push_event_no_reconfigure_not_forced(self):
+        self._test_push_event_reconfigure('org/common-config', 'master',
+                                          modified_files=['README'],
+                                          old_sha='1' * 40,
+                                          expect_reconfigure=False)
 
     @simple_layout('layouts/basic-github.yaml', driver='github')
     def test_push_event_reconfigure_complex_branch(self):

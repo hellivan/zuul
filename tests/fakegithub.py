@@ -1624,7 +1624,7 @@ class FakeGithubConnection(githubconnection.GithubConnection):
 
     def getPushEvent(self, project, ref, old_rev=None, new_rev=None,
                      added_files=None, removed_files=None,
-                     modified_files=None):
+                     modified_files=None, forced=False):
         if added_files is None:
             added_files = []
         if removed_files is None:
@@ -1640,6 +1640,7 @@ class FakeGithubConnection(githubconnection.GithubConnection):
             'ref': ref,
             'before': old_rev,
             'after': new_rev,
+            'forced': forced,
             'repository': {
                 'full_name': project
             },

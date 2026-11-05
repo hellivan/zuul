@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    The GitHub driver now asks a merger which files changed when a
+    branch is force pushed (or updated with 2048 or more commits).
+    GitHub sends no commit list for a force push, so Zuul didn't notice
+    changes to its configuration that came in with a rebase onto a
+    changed base branch and kept using a stale configuration for that
+    branch.  The tenant is reconfigured if the configuration changed,
+    or if the merger can't tell.
