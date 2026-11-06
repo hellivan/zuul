@@ -359,6 +359,7 @@ class PeekQueue:
                     # does it means gerrit has reversed the order of
                     # events!
                     del self.change_merged_cache[newrev]
+                    event.has_change_merged = True
                 else:
                     ref_updates[newrev] = event
             elif kind == 'change-merged':
@@ -367,6 +368,7 @@ class PeekQueue:
                     # This is a change-merged event that matches a
                     # ref-updated event we're interested in.
                     other_event = ref_updates.pop(newrev)
+                    other_event.has_change_merged = True
                     idx = new_event_list.index(other_event)
                     # Put our event immediately before the ref-updated event
                     new_event_list.insert(idx, event)
@@ -566,6 +568,12 @@ class GerritEventProcessor:
                              (event.type,))
         if event._branch_ref_update:
             self.connection.clearConnectionCacheOnBranchEvent(event)
+            # A change-merged event brings its own file list, so only
+            # look at the files of pushes that bypassed review.
+            if (event.branch_updated and
+                not getattr(self.connection_event,
+                            'has_change_merged', False)):
+                self._updateBranchFiles(event)
 
         change = self._getChange(event, min_change_ltime)
         if (change and change.patchset and
@@ -573,6 +581,27 @@ class GerritEventProcessor:
             event.patch_number = str(change.patchset)
 
         return [event]
+
+    def _updateBranchFiles(self, event):
+        # Without a file list the Branch change looks like it doesn't
+        # touch the config, so a directly pushed config change would
+        # not reconfigure the tenant.
+        canonical_name = event.canonical_project_name
+        for tenant in self.connection.sched.abide.tenants.values():
+            tpc = tenant.project_configs.get(canonical_name)
+            if tpc and tpc.load_classes and tpc.includesBranch(event.branch):
+                break
+        else:
+            return
+        change_key = self.connection.source.getChangeKey(event)
+        change = self.connection.source.getChange(change_key, event=event)
+        files = self.connection.getBranchUpdateFileNames(event)
+
+        def update(c):
+            c.files = files
+
+        self.connection._change_cache.updateChangeWithRetry(
+            change_key, change, update)
 
     def _getChange(self, event, min_change_ltime):
         # Grab the change if we are managing the project or if it exists in the
@@ -975,6 +1004,31 @@ class GerritConnection(ZKChangeCacheMixin, ZKBranchCacheMixin, BaseConnection):
         except ConcurrentUpdateError:
             change = self._change_cache.get(change_key)
         return change
+
+    def getBranchUpdateFileNames(self, event):
+        """Ask a merger which files differ between the old and new tip
+
+        Returns None if that can't be determined (for example because
+        the merger doesn't have the old commit anymore), which makes
+        callers assume that everything may have changed.
+        """
+        log = get_annotated_logger(self.log, event)
+        if not event.oldrev or not event.newrev:
+            return None
+        try:
+            job = self.sched.merger.getFilesChangesRaw(
+                self.connection_name, event.project_name, event.branch,
+                event.oldrev, needs_result=True, diff_only=True)
+            job.wait()
+            if not job.updated:
+                log.debug("Fileschanges job %s for %s..%s failed",
+                          job, event.oldrev, event.newrev)
+                return None
+            return job.files[0]
+        except Exception:
+            log.exception("Unable to get the files changed by the update "
+                          "of %s from %s", event.branch, event.oldrev)
+            return None
 
     def _getRef(self, change_key, refresh=False, event=None):
         change = self._change_cache.get(change_key)

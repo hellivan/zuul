@@ -1,0 +1,11 @@
+---
+fixes:
+  - |
+    The Gerrit driver now asks a merger which files changed when a
+    branch is updated by a direct push, i.e. a ``ref-updated`` event
+    that has no matching ``change-merged`` event.  Gerrit sends no file
+    list for those events, so Zuul didn't notice changes to its
+    configuration that were pushed to a branch without going through
+    review and kept using a stale configuration for that branch.  The
+    tenant is reconfigured if the configuration changed, or if the
+    merger can't tell.
